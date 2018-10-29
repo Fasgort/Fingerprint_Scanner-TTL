@@ -11,6 +11,8 @@
 
 #include "Arduino.h"
 #include "SoftwareSerial.h"
+#include <doxygen.h>
+#include <ESP8266.h>
 
 // Debug level:
 //  0: Disabled
@@ -163,8 +165,8 @@ public:
     static const uint8_t DATA_DEVICE_ID_1 = 0x01;	// Device ID Byte 1 (lesser byte)							-	theoretically never changes
     static const uint8_t DATA_DEVICE_ID_2 = 0x00;	// Device ID Byte 2 (greater byte)
 
-    void GetData(uint8_t buffer[]);
-	void GetLastData(uint8_t buffer[], uint16_t length);
+    void GetData(uint8_t buffer[], ESP8266* esp);
+	void GetLastData(uint8_t buffer[], uint16_t length, ESP8266* esp);
 private:
 	bool CheckParsing(uint8_t b, uint8_t propervalue, uint8_t alternatevalue, const char* varname);
 	uint16_t CalculateChecksum(uint8_t* buffer, uint16_t length);
@@ -190,7 +192,7 @@ class FPS_GT511C3
 #endif  //__GNUC__
 	// Creates a new object to interface with the fingerprint scanner
 	// It will establish the communication to the desired baud rate if defined
-	FPS_GT511C3(uint8_t rx, uint8_t tx, uint32_t baud = 9600);
+	FPS_GT511C3(uint8_t rx, uint8_t tx, SoftwareSerial* esp_serial, ESP8266* esp, uint32_t baud = 9600);
 
 	// destructor
 	~FPS_GT511C3();
@@ -376,6 +378,9 @@ private:
     void GetData(uint16_t length);
     uint8_t pin_RX,pin_TX;
     SoftwareSerial _serial;
+	SoftwareSerial* _esp_serial;
+	ESP8266* _esp;
+
 };
 
 

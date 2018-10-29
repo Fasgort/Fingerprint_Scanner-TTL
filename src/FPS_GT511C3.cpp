@@ -229,20 +229,19 @@ Data_Packet::Data_Packet(uint8_t* buffer)
 #endif
 }
 
-// Get a data packet (128 bytes), calculate checksum and send it to serial
-void Data_Packet::GetData(uint8_t buffer[])
+// Get a data packet (64 bytes), calculate checksum and send it to serial
+void Data_Packet::GetData(uint8_t buffer[], ESP8266* esp)
 {
-    for(uint16_t i = 0; i<128; i++) Serial.write(buffer[i]);
+	esp->send(buffer, 64);
 #if FPS_DEBUG
-	this->checksum = CalculateChecksum(buffer, 128);
+	this->checksum = CalculateChecksum(buffer, 64);
 #endif
 }
 
-// Get the last data packet (<=128 bytes), calculate checksum, validate checksum received and send it to serial
-void Data_Packet::GetLastData(uint8_t buffer[], uint16_t length)
+// Get the last data packet (<=64 bytes), calculate checksum, validate checksum received and send it to serial
+void Data_Packet::GetLastData(uint8_t buffer[], uint16_t length, ESP8266* esp)
 {
-    for(uint16_t i = 0; i<length; i++) Serial.write(buffer[i]);
-
+	esp->send(buffer, length);
 #if FPS_DEBUG
     this->checksum = CalculateChecksum(buffer, length-2);
     uint8_t checksum_low = GetLowByte(this->checksum);
@@ -308,13 +307,15 @@ uint8_t Data_Packet::GetLowByte(uint16_t w)
 #endif  //__GNUC__
 // Creates a new object to interface with the fingerprint scanner
 // It will establish the communication to the desired baud rate if defined
-FPS_GT511C3::FPS_GT511C3(uint8_t rx, uint8_t tx, uint32_t baud)
+FPS_GT511C3::FPS_GT511C3(uint8_t rx, uint8_t tx, SoftwareSerial* esp_serial, ESP8266* esp, uint32_t baud)
 	: _serial(rx,tx)
 {
 	pin_RX = rx;
 	pin_TX = tx;
     this->Started = false;
     desiredBaud = baud;
+	_esp_serial = esp_serial;
+	_esp = esp;
 };
 
 // destructor
@@ -1128,19 +1129,17 @@ void FPS_GT511C3::GetData(uint16_t length)
 	}
 	Data_Packet dp(firstdata);
 
-	uint16_t numberPacketsNeeded = (length-4) / 128;
+	uint16_t numberPacketsNeeded = (length-4) / 64;
 	bool smallLastPacket = false;
-	uint8_t lastPacketSize = (length-4) % 128;
+	uint8_t lastPacketSize = (length-4) % 64;
 	if(lastPacketSize != 0)
 	{
-            numberPacketsNeeded++;
-            smallLastPacket = true;
+		numberPacketsNeeded++;
+		smallLastPacket = true;
 	}
 
-    uint8_t data[128];
-	for (uint16_t packetCount=1; packetCount < numberPacketsNeeded; packetCount++)
-    {
-        for (uint8_t i=0; i < 128; i++)
+	uint8_t data[length-4];
+	for (uint16_t i=0; i < length-4; i++)
         {
             while (_serial.available() == false) delay(1);
             if(_serial.overflow())
@@ -1161,16 +1160,24 @@ void FPS_GT511C3::GetData(uint16_t length)
             }
             data[i]= (uint8_t) _serial.read();
         }
-        dp.GetData(data);
+		
+	_esp_serial->listen();
+
+	for (uint16_t packetCount=1; packetCount < numberPacketsNeeded; packetCount++)
+    {
+		uint8_t data_buffer[64];
+		for (uint8_t i=0; i < 64; i++) {
+			data_buffer[i] = data[(packetCount-1)*64 + i];
+		}
+		dp.GetData(data_buffer, _esp);
 	}
 
 	uint8_t lastdata[lastPacketSize];
-	for (uint8_t i=0; i < lastPacketSize; i++)
-	{
-		while (_serial.available() == false) delay(10);
-		lastdata[i]= (uint8_t) _serial.read();
+	for (uint8_t i=0; i < lastPacketSize; i++) {
+		lastdata[i] = data[(numberPacketsNeeded)*64 + i];
 	}
-	dp.GetLastData(lastdata, lastPacketSize);
+	dp.GetLastData(lastdata, lastPacketSize, _esp);
+	
 };
 
 // sends the byte array to the serial debugger in our hex format EX: "00 AF FF 10 00 13"
