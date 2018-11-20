@@ -1174,7 +1174,7 @@ void FPS_GT511C3::GetData(uint16_t length)
 
 	uint8_t lastdata[lastPacketSize];
 	for (uint8_t i=0; i < lastPacketSize; i++) {
-		lastdata[i] = data[(numberPacketsNeeded)*64 + i];
+		lastdata[i] = data[(numberPacketsNeeded-1)*64 + i];
 	}
 	dp.GetLastData(lastdata, lastPacketSize, _esp);
 	
