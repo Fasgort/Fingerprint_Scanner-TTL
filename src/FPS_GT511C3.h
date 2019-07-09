@@ -12,10 +12,6 @@
 #include "Arduino.h"
 #include "SoftwareSerial.h"
 
-// Debug level:
-//  0: Disabled
-//  1: Enables verbose debug output using hardware Serial
-#define FPS_DEBUG 0
 
 #ifndef __GNUC__
 #pragma region -= Command_Packet =-
@@ -33,10 +29,7 @@ class Command_Packet
 				{
 					NotSet				= 0x00,		// Default value for enum. Scanner will return error if sent this.
 					Open				= 0x01,		// Open Initialization
-					Close				= 0x02,		// Close Termination
-					UsbInternalCheck	= 0x03,		// UsbInternalCheck Check if the connected USB device is valid
 					ChangeBaudRate		= 0x04,		// ChangeBaudrate Change UART baud rate
-					SetIAPMode			= 0x05,		// SetIAPMode Enter IAP Mode In this mode, FW Upgrade is available
 					CmosLed				= 0x12,		// CmosLed Control CMOS LED
 					GetEnrollCount		= 0x20,		// Get enrolled fingerprint count
 					CheckEnrolled		= 0x21,		// Check whether the specified ID is already enrolled
@@ -47,20 +40,10 @@ class Command_Packet
 					IsPressFinger		= 0x26,		// Check if a finger is placed on the sensor
 					DeleteID			= 0x40,		// Delete the fingerprint with the specified ID
 					DeleteAll			= 0x41,		// Delete all fingerprints from the database
-					Verify1_1			= 0x50,		// Verification of the capture fingerprint image with the specified ID
 					Identify1_N			= 0x51,		// Identification of the capture fingerprint image with the database
-					VerifyTemplate1_1	= 0x52,		// Verification of a fingerprint template with the specified ID
-					IdentifyTemplate1_N	= 0x53,		// Identification of a fingerprint template with the database
 					CaptureFinger		= 0x60,		// Capture a fingerprint image(256x256) from the sensor
-					MakeTemplate		= 0x61,		// Make template for transmission
-					GetImage			= 0x62,		// Download the captured fingerprint image(256x256)
-					GetRawImage			= 0x63,		// Capture & Download raw fingerprint image(320x240)
 					GetTemplate			= 0x70,		// Download the template of the specified ID
 					SetTemplate			= 0x71,		// Upload the template of the specified ID
-					GetDatabaseStart	= 0x72,		// Start database download, obsolete
-					GetDatabaseEnd		= 0x73,		// End database download, obsolete
-					UpgradeFirmware		= 0x80,		// Not supported
-					UpgradeISOCDImage	= 0x81,		// Not supported
 					Ack					= 0x30,		// Acknowledge.
 					Nack				= 0x31		// Non-acknowledge
 			};
@@ -138,11 +121,6 @@ class Response_Packet
 		static const uint8_t RESPONSE_DEVICE_ID_2 = 0x00;	// Device ID Byte 2 (greater byte)							-	theoretically never changes
 		uint32_t FromParameter();
 
-	private:
-		bool CheckParsing(uint8_t b, uint8_t propervalue, uint8_t alternatevalue, const String varname);
-		uint16_t CalculateChecksum(uint8_t buffer[], uint16_t length);
-		uint8_t GetHighByte(uint16_t w);
-		uint8_t GetLowByte(uint16_t w);
 };
 #ifndef __GNUC__
 #pragma endregion
@@ -156,18 +134,14 @@ class Response_Packet
 class Data_Packet
 {
 public:
-	Data_Packet(uint8_t buffer[], uint16_t length, SoftwareSerial _serial);
-    Data_Packet(uint8_t buffer[]);
+	Data_Packet(uint8_t buffer[], uint16_t length, SoftwareSerial &_serial);
     uint16_t checksum = 0;
     static const uint8_t DATA_START_CODE_1 = 0x5A;	// Static byte to mark the beginning of a data packet	-	never changes
     static const uint8_t DATA_START_CODE_2 = 0xA5;	// Static byte to mark the beginning of a data packet	-	never changes
     static const uint8_t DATA_DEVICE_ID_1 = 0x01;	// Device ID Byte 1 (lesser byte)							-	theoretically never changes
     static const uint8_t DATA_DEVICE_ID_2 = 0x00;	// Device ID Byte 2 (greater byte)
 
-    void GetData(uint8_t buffer[], uint16_t length);
-	void GetLastData(uint8_t buffer[], uint16_t length);
 private:
-	bool CheckParsing(uint8_t b, uint8_t propervalue, uint8_t alternatevalue, const String varname);
 	uint16_t CalculateChecksum(uint8_t buffer[], uint16_t length);
     uint8_t GetHighByte(uint16_t w);
     uint8_t GetLowByte(uint16_t w);
@@ -184,14 +158,13 @@ class FPS_GT511C3
 {
 
  public:
-	uint32_t desiredBaud;
 
 #ifndef __GNUC__
 	#pragma region -= Constructor/Destructor =-
 #endif  //__GNUC__
 	// Creates a new object to interface with the fingerprint scanner
 	// It will establish the communication to the desired baud rate if defined
-	FPS_GT511C3(uint8_t rx, uint8_t tx, uint32_t baud = 9600);
+	FPS_GT511C3(uint8_t rx, uint8_t tx);
 
 	// destructor
 	~FPS_GT511C3();
@@ -205,11 +178,7 @@ class FPS_GT511C3
 #endif  //__GNUC__
 	//Initialises the device and gets ready for commands
 	//Returns true if the communication established
-	bool Open();
-
-	// Does not actually do anything (according to the datasheet)
-	// I implemented open, so had to do closed too... lol
-	void Close();
+	bool Open(uint32_t baud = 9600);
 
 	// Turns on or off the LED backlight
 	// LED must be on to see fingerprints
@@ -279,16 +248,6 @@ class FPS_GT511C3
 	// Returns: true if successful, false if db is empty
 	bool DeleteAll();
 
-	// Checks the currently pressed finger against a specific ID
-	// Parameter: 0-2999, if using GT-521F52 (id number to be checked)
-        //            0-199, if using GT-521F32/GT-511C3 (id number to be checked)
-	// Returns:
-	//	0 - Verified OK (the correct finger)
-	//	1 - Invalid Position
-	//	2 - ID is not in use
-	//	3 - Verified FALSE (not the correct finger)
-	uint8_t Verify1_1(uint16_t id);
-
 	// Checks the currently pressed finger against all enrolled fingerprints
 	// Returns:
 	//	Verified against the specified ID (found, and here is the ID number)
@@ -304,24 +263,6 @@ class FPS_GT511C3
 	// Generally, use high quality for enrollment, and low quality for verification/identification
 	// Returns: True if ok, false if no finger pressed
 	bool CaptureFinger(bool highquality);
-
-    // Gets an image that is 258x202 (52116 bytes + 2 bytes checksum) and sends it over serial
-    // WARNING: The documentation is totally wrong (at least in GT-511C3). Check implementation comments.
-    // Returns: True (device confirming download)
-    // Parameter: true to ignore the documentation and get valid image data.
-	bool GetImage(bool patched = false);
-
-	// Gets an image that is qvga 160x120 (19200 bytes + 2 bytes checksum) and sends it over serial
-    // Returns: True (device confirming download)
-	bool GetRawImage();
-
-    // Gets a template from the fps (498 bytes + 2 bytes checksum)
-	// Parameter: 0-199 ID number
-	// Returns:
-	//	0 - ACK Download starting
-	//	1 - Invalid position
-	//	2 - ID not used (no template to download
-	uint8_t GetTemplate(uint16_t id);
 	
 	// Gets a template from the fps (498 bytes + 2 bytes checksum) and store it in an array
 	// Parameter: 0-199 ID number, array pointer to store the data
@@ -369,20 +310,16 @@ class FPS_GT511C3
 	#pragma endregion
 #endif  //__GNUC__
 
-	void serialPrintHex(uint8_t data);
-	void SendToSerial(uint8_t data[], uint16_t length);
-
 private:
 
     // Indicates if the communication was configured for the first time
 	bool Started;
 
     //Configures the device correctly for communications at the desired baud rate
-    void Start();
+    void Start(uint32_t baud = 9600);
 
     void SendCommand(uint8_t cmd[], uint16_t length);
     Response_Packet* GetResponse();
-    void GetData(uint16_t length);
 	bool ReturnData(uint16_t length, uint8_t data[]);
     uint8_t pin_RX,pin_TX;
     SoftwareSerial _serial;
